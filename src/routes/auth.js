@@ -47,10 +47,11 @@ router.get("/profile/:userId", async (req, res) => {
 });
 
 router.put("/profile/:userId", async (req, res) => {
-  const { username, avatar } = req.body;
+  const { username, avatar, banner } = req.body;
   const updates = {};
   if (username) updates.username = username;
   if (avatar) updates.avatar = avatar;
+  if (banner) updates.banner = banner;
 
   const user = await User.findByIdAndUpdate(
     req.params.userId,

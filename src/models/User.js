@@ -5,6 +5,7 @@ export default mongoose.model("User",
     username: { type: String, unique: true },
     email: { type: String, unique: true },
     password: String,
-    avatar: String
+    avatar: String,
+    banner: String
   })
 );
