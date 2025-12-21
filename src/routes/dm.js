@@ -66,4 +66,54 @@ router.get("/:roomId/:userId", async (req, res) => {
   }
 });
 
+/**
+ * DM CLOSE
+ * POST /api/dm/close
+ */
+router.post("/close", async (req, res) => {
+  try {
+    const { roomId, userId } = req.body;
+    if (!roomId || !userId) {
+      return res.status(400).json({ message: "roomId ve userId gerekli" });
+    }
+
+    const room = await DmRoom.findById(roomId);
+    if (!room) return res.status(404).json({ message: "DM bulunamadi" });
+    const hasUser = room.users.some((u) => u.toString() === userId.toString());
+    if (!hasUser) return res.status(403).json({ message: "Yetkisiz" });
+
+    await Message.deleteMany({ dmRoom: roomId });
+    await DmRoom.deleteOne({ _id: roomId });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "DM kapatilamadi" });
+  }
+});
+
+/**
+ * DM INVITE
+ * POST /api/dm/invite
+ */
+router.post("/invite", async (req, res) => {
+  try {
+    const { roomId, userId } = req.body;
+    if (!roomId || !userId) {
+      return res.status(400).json({ message: "roomId ve userId gerekli" });
+    }
+
+    const room = await DmRoom.findById(roomId);
+    if (!room) return res.status(404).json({ message: "DM bulunamadi" });
+    const hasUser = room.users.some((u) => u.toString() === userId.toString());
+    if (!hasUser) return res.status(403).json({ message: "Yetkisiz" });
+
+    const baseUrl = process.env.FRONTEND_URL || req.headers.origin || "http://localhost:5173";
+    res.json({ link: `${baseUrl}/dm/${roomId}` });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Davet olusturulamadi" });
+  }
+});
+
 export default router;
