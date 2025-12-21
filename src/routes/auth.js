@@ -11,8 +11,16 @@ router.post("/register", async (req, res) => {
   }
 
   const hash = await bcryptjs.hash(password, 10);
-  const user = await User.create({ ...req.body, password: hash });
-  res.json(user);
+  try {
+    const user = await User.create({ ...req.body, password: hash });
+    res.json(user);
+  } catch (err) {
+    if (err?.code === 11000) {
+      const field = Object.keys(err.keyPattern || {})[0] || "kullanıcı";
+      return res.status(409).json({ message: `${field} zaten kullanılıyor` });
+    }
+    throw err;
+  }
 });
 
 router.post("/login", async (req, res) => {
