@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import cors from "cors";
 import dotenv from "dotenv";
 
@@ -26,7 +27,8 @@ app.use(
   })
 );
 app.use(express.json());
-app.use("/uploads", express.static("uploads"));
+const uploadDir = process.env.UPLOAD_DIR || "uploads";
+app.use("/uploads", express.static(uploadDir));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
