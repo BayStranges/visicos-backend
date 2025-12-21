@@ -5,17 +5,29 @@ import User from "../models/User.js";
 const router = express.Router();
 
 router.post("/register", async (req, res) => {
-  const hash = await bcryptjs.hash(req.body.password, 10);
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email ve şifre gerekli" });
+  }
+
+  const hash = await bcryptjs.hash(password, 10);
   const user = await User.create({ ...req.body, password: hash });
   res.json(user);
 });
 
 router.post("/login", async (req, res) => {
-  const user = await User.findOne({ email: req.body.email });
-  if (!user) return res.status(404).end();
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email ve şifre gerekli" });
+  }
 
-  const ok = await bcryptjs.compare(req.body.password, user.password);
-  if (!ok) return res.status(401).end();
+  const user = await User.findOne({ email });
+  if (!user || !user.password) {
+    return res.status(401).json({ message: "Email veya şifre hatalı" });
+  }
+
+  const ok = await bcryptjs.compare(password, user.password);
+  if (!ok) return res.status(401).json({ message: "Email veya şifre hatalı" });
 
   res.json(user);
 });
