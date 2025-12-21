@@ -12,8 +12,13 @@ await connectDB();
 
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  "https://visicos-frontend.vercel.app",
+  "http://localhost:5173"
+];
+
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: { origin: allowedOrigins, credentials: true }
 });
 
 const onlineUsers = new Set();
