@@ -47,11 +47,14 @@ router.get("/profile/:userId", async (req, res) => {
 });
 
 router.put("/profile/:userId", async (req, res) => {
-  const { username, avatar, banner } = req.body;
+  const { username, avatar, banner, email, phone, displayName } = req.body;
   const updates = {};
   if (username) updates.username = username;
   if (avatar) updates.avatar = avatar;
   if (banner) updates.banner = banner;
+  if (email) updates.email = email;
+  if (phone) updates.phone = phone;
+  if (displayName) updates.displayName = displayName;
 
   const user = await User.findByIdAndUpdate(
     req.params.userId,
@@ -62,6 +65,66 @@ router.put("/profile/:userId", async (req, res) => {
   if (!user) return res.status(404).json({ message: "Kullanıcı bulunamadı" });
 
   res.json(user);
+});
+
+router.post("/devices/register", async (req, res) => {
+  const { userId, deviceId, name, location, userAgent } = req.body || {};
+  if (!userId || !deviceId) {
+    return res.status(400).json({ message: "userId ve deviceId gerekli" });
+  }
+
+  const user = await User.findById(userId);
+  if (!user) return res.status(404).json({ message: "Kullanici bulunamadi" });
+
+  if (!user.devices) user.devices = [];
+  const existing = user.devices.find((d) => d.deviceId === deviceId);
+  if (existing) {
+    existing.name = name || existing.name;
+    existing.location = location || existing.location;
+    existing.userAgent = userAgent || existing.userAgent;
+    existing.lastActive = new Date();
+  } else {
+    user.devices.push({
+      deviceId,
+      name: name || "Unknown",
+      location: location || "Unknown",
+      userAgent: userAgent || "",
+      lastActive: new Date()
+    });
+  }
+
+  await user.save();
+  res.json({ ok: true, devices: user.devices });
+});
+
+router.get("/devices/:userId", async (req, res) => {
+  const user = await User.findById(req.params.userId).select("devices");
+  if (!user) return res.status(404).json({ message: "Kullanici bulunamadi" });
+  res.json(user.devices || []);
+});
+
+router.post("/devices/remove", async (req, res) => {
+  const { userId, deviceId } = req.body || {};
+  if (!userId || !deviceId) {
+    return res.status(400).json({ message: "userId ve deviceId gerekli" });
+  }
+  const user = await User.findById(userId);
+  if (!user) return res.status(404).json({ message: "Kullanici bulunamadi" });
+  user.devices = (user.devices || []).filter((d) => d.deviceId !== deviceId);
+  await user.save();
+  res.json({ ok: true, devices: user.devices });
+});
+
+router.post("/devices/logout-all", async (req, res) => {
+  const { userId, keepDeviceId } = req.body || {};
+  if (!userId) {
+    return res.status(400).json({ message: "userId gerekli" });
+  }
+  const user = await User.findById(userId);
+  if (!user) return res.status(404).json({ message: "Kullanici bulunamadi" });
+  user.devices = (user.devices || []).filter((d) => d.deviceId === keepDeviceId);
+  await user.save();
+  res.json({ ok: true, devices: user.devices });
 });
 
 export default router;
