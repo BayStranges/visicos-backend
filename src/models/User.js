@@ -9,6 +9,17 @@ export default mongoose.model("User",
     avatar: String,
     banner: String,
     phone: String,
+    pushSubscriptions: [
+      {
+        endpoint: String,
+        keys: {
+          p256dh: String,
+          auth: String
+        },
+        userAgent: String,
+        createdAt: Date
+      }
+    ],
     devices: [
       {
         deviceId: String,

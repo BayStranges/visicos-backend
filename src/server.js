@@ -6,6 +6,7 @@ import { connectDB } from "./config/db.js";
 
 import Message from "./models/Message.js";
 import DmRoom from "./models/DmRoom.js";
+import { sendPushToUser } from "./push.js";
 
 dotenv.config();
 await connectDB();
@@ -145,6 +146,13 @@ io.on("connection", (socket) => {
         io.to(targetId).emit("messages-read", { roomId });
       } else {
         io.to(targetId).emit("new-message", { roomId, message });
+        await sendPushToUser(targetId, {
+          title: message?.sender?.username
+            ? `New message from ${message.sender.username}`
+            : "New message",
+          body: message?.content?.slice(0, 140) || "Open Nexora to read",
+          url: `/dm/${roomId}`
+        });
       }
     }
   });

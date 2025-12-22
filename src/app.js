@@ -7,6 +7,7 @@ import authRoute from "./routes/auth.js";
 import friendsRoute from "./routes/friends.js";
 import dmRoute from "./routes/dm.js";
 import uploadRoute from "./routes/upload.js";
+import pushRoute from "./routes/push.js";
 
 dotenv.config();
 
@@ -36,5 +37,6 @@ app.use("/api/auth", authRoute);
 app.use("/api/friends", friendsRoute);
 app.use("/api/dm", dmRoute);
 app.use("/api/upload", uploadRoute);
+app.use("/api/push", pushRoute);
 
 export default app;
