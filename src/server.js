@@ -7,6 +7,7 @@ import { connectDB } from "./config/db.js";
 import Message from "./models/Message.js";
 import DmRoom from "./models/DmRoom.js";
 import { sendPushToUser } from "./push.js";
+import { createSfuHandlers } from "./sfu.js";
 
 dotenv.config();
 await connectDB();
@@ -26,6 +27,7 @@ const onlineUsers = new Set();
 
 io.on("connection", (socket) => {
   console.log("socket connected:", socket.id);
+  createSfuHandlers(io, socket);
 
   /* ================= USER ================= */
   socket.on("user-online", (userId) => {
