@@ -1,6 +1,7 @@
 import express from "express";
 import Server from "../models/Server.js";
 import User from "../models/User.js";
+import ChannelMessage from "../models/ChannelMessage.js";
 
 const router = express.Router();
 
@@ -46,6 +47,24 @@ router.get("/:id", async (req, res) => {
     .populate("members", "username avatar");
   if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
   res.json(server);
+});
+
+router.get("/:id/channels/:channelId/messages", async (req, res) => {
+  const { id, channelId } = req.params;
+  const limit = Math.min(parseInt(req.query.limit || "100", 10), 200);
+
+  const server = await Server.findById(id).select("_id channels");
+  if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+
+  const channelExists = server.channels.id(channelId);
+  if (!channelExists) return res.status(404).json({ message: "Kanal bulunamadi" });
+
+  const messages = await ChannelMessage.find({ server: id, channel: channelId })
+    .sort({ createdAt: 1 })
+    .limit(limit)
+    .populate("sender", "username avatar");
+
+  res.json(messages);
 });
 
 router.post("/:id/channels", async (req, res) => {

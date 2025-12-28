@@ -6,6 +6,7 @@ import { connectDB } from "./config/db.js";
 
 import Message from "./models/Message.js";
 import DmRoom from "./models/DmRoom.js";
+import ChannelMessage from "./models/ChannelMessage.js";
 import { sendPushToUser } from "./push.js";
 import { createSfuHandlers } from "./sfu.js";
 
@@ -157,6 +158,33 @@ io.on("connection", (socket) => {
         });
       }
     }
+  });
+
+  /* ================= CHANNEL ================= */
+  socket.on("join-channel", ({ channelId, userId }) => {
+    if (!channelId || !userId) return;
+    socket.userId = userId;
+    socket.join(`channel:${channelId}`);
+  });
+
+  socket.on("leave-channel", ({ channelId }) => {
+    if (!channelId) return;
+    socket.leave(`channel:${channelId}`);
+  });
+
+  socket.on("send-channel-message", async ({ serverId, channelId, senderId, content }) => {
+    if (!serverId || !channelId || !senderId || !content?.trim()) return;
+
+    let message = await ChannelMessage.create({
+      server: serverId,
+      channel: channelId,
+      sender: senderId,
+      content: content.trim()
+    });
+
+    message = await message.populate("sender", "username avatar");
+
+    io.to(`channel:${channelId}`).emit("channel-message", message);
   });
 
   /* ================= DELETE ================= */
