@@ -39,9 +39,32 @@ router.get("/list/:userId", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
-  const server = await Server.findById(id).populate("owner", "username avatar");
+  const server = await Server.findById(id)
+    .populate("owner", "username avatar")
+    .populate("members", "username avatar");
   if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
   res.json(server);
+});
+
+router.post("/:id/channels", async (req, res) => {
+  const { id } = req.params;
+  const { name, type } = req.body;
+
+  if (!name?.trim() || !type) {
+    return res.status(400).json({ message: "name ve type gerekli" });
+  }
+
+  if (!["text", "voice"].includes(type)) {
+    return res.status(400).json({ message: "Gecersiz kanal tipi" });
+  }
+
+  const server = await Server.findById(id);
+  if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+
+  server.channels.push({ name: name.trim(), type });
+  await server.save();
+
+  res.json(server.channels[server.channels.length - 1]);
 });
 
 export default router;
