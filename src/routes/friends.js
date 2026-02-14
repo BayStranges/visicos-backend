@@ -8,7 +8,8 @@ import { sendPushToUser } from "../push.js";
 const router = express.Router();
 
 router.post("/request", async (req, res) => {
-  const { senderId, username } = req.body;
+  const { username } = req.body;
+  const senderId = req.user?.id;
 
   const receiver = await User.findOne({ username });
   if (!receiver) return res.status(404).json({ message: "Kullanıcı bulunamadı" });
@@ -34,6 +35,9 @@ router.post("/request", async (req, res) => {
 
 router.get("/requests/:userId", async (req, res) => {
   const { userId } = req.params;
+  if (req.user?.id?.toString() !== userId.toString()) {
+    return res.status(403).json({ message: "Yetkisiz" });
+  }
 
   const list = await FriendRequest.find({ receiver: userId, status: "pending" })
     .populate("sender", "username");

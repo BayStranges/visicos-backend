@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import DmRoom from "../models/DmRoom.js";
 import Message from "../models/Message.js";
 
@@ -12,35 +13,59 @@ router.get("/list/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const rooms = await DmRoom.find({ users: userId }).populate("users", "username avatar");
-
-    const result = [];
-
-    for (const room of rooms) {
-      const lastMessage = await Message.findOne({ dmRoom: room._id })
-        .sort({ createdAt: -1 })
-        .populate("sender", "username avatar");
-
-      const unreadCount = await Message.countDocuments({
-        dmRoom: room._id,
-        sender: { $ne: userId },     // kendi mesajın sayılmasın
-        readBy: { $ne: userId },     // okunmamış
-        deleted: { $ne: true }       // silinmiş sayılmasın
-      });
-
-      result.push({
-        ...room.toObject(),
-        lastMessage,
-        unreadCount
-      });
+    if (req.user?.id?.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Yetkisiz" });
     }
+
+    const rooms = await DmRoom.find({ users: userId }).populate("users", "username avatar");
+    if (!rooms.length) return res.json([]);
+
+    const roomIds = rooms.map((r) => r._id);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const lastMessagesRaw = await Message.aggregate([
+      { $match: { dmRoom: { $in: roomIds } } },
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: "$dmRoom", message: { $first: "$$ROOT" } } }
+    ]);
+
+    const lastMessages = await Message.populate(
+      lastMessagesRaw.map((m) => m.message),
+      { path: "sender", select: "username avatar" }
+    );
+
+    const lastMap = new Map();
+    for (const msg of lastMessages) {
+      lastMap.set(msg.dmRoom.toString(), msg);
+    }
+
+    const unreadAgg = await Message.aggregate([
+      {
+        $match: {
+          dmRoom: { $in: roomIds },
+          sender: { $ne: userObjectId },
+          readBy: { $ne: userObjectId },
+          deleted: { $ne: true }
+        }
+      },
+      { $group: { _id: "$dmRoom", count: { $sum: 1 } } }
+    ]);
+
+    const unreadMap = new Map(unreadAgg.map((u) => [u._id.toString(), u.count]));
+
+    const result = rooms.map((room) => ({
+      ...room.toObject(),
+      lastMessage: lastMap.get(room._id.toString()) || null,
+      unreadCount: unreadMap.get(room._id.toString()) || 0
+    }));
 
     res.json(result);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ message: "DM listesi alınamadı" });
+    res.status(500).json({ message: "DM listesi alinamadi" });
   }
 });
+
 
 /**
  * DM MESSAGES + okundu işaretle
@@ -49,14 +74,26 @@ router.get("/list/:userId", async (req, res) => {
 router.get("/:roomId/:userId", async (req, res) => {
   try {
     const { roomId, userId } = req.params;
+    if (req.user?.id?.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Yetkisiz" });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit || "200", 10), 200);
+    const before = req.query.before ? new Date(req.query.before) : null;
 
     await Message.updateMany(
       { dmRoom: roomId, readBy: { $ne: userId } },
       { $addToSet: { readBy: userId } }
     );
 
-    const messages = await Message.find({ dmRoom: roomId })
+    const query = { dmRoom: roomId };
+    if (before && !Number.isNaN(before.getTime())) {
+      query.createdAt = { $lt: before };
+    }
+
+    const messages = await Message.find(query)
       .sort({ createdAt: 1 })
+      .limit(limit)
       .populate("sender", "username avatar");
 
     res.json(messages);
@@ -75,6 +112,9 @@ router.post("/close", async (req, res) => {
     const { roomId, userId } = req.body;
     if (!roomId || !userId) {
       return res.status(400).json({ message: "roomId ve userId gerekli" });
+    }
+    if (req.user?.id?.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Yetkisiz" });
     }
 
     const room = await DmRoom.findById(roomId);
@@ -101,6 +141,9 @@ router.post("/invite", async (req, res) => {
     const { roomId, userId } = req.body;
     if (!roomId || !userId) {
       return res.status(400).json({ message: "roomId ve userId gerekli" });
+    }
+    if (req.user?.id?.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Yetkisiz" });
     }
 
     const room = await DmRoom.findById(roomId);

@@ -11,6 +11,9 @@ router.post("/", async (req, res) => {
   if (!name?.trim() || !ownerId) {
     return res.status(400).json({ message: "name ve ownerId gerekli" });
   }
+  if (req.user?.id?.toString() !== ownerId.toString()) {
+    return res.status(403).json({ message: "Yetkisiz" });
+  }
 
   const owner = await User.findById(ownerId).select("_id");
   if (!owner) {
@@ -32,6 +35,9 @@ router.post("/", async (req, res) => {
 router.get("/list/:userId", async (req, res) => {
   const { userId } = req.params;
   if (!userId) return res.status(400).json({ message: "userId gerekli" });
+  if (req.user?.id?.toString() !== userId.toString()) {
+    return res.status(403).json({ message: "Yetkisiz" });
+  }
 
   const list = await Server.find({ members: userId })
     .sort({ createdAt: -1 })

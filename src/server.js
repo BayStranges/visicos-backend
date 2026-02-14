@@ -24,7 +24,32 @@ const io = new Server(server, {
   cors: { origin: allowedOrigins, credentials: true }
 });
 
-const onlineUsers = new Set();
+const onlineUsers = new Map();
+
+const emitOnlineUsers = () => {
+  io.emit("online-users", Array.from(onlineUsers.keys()));
+};
+
+const trackUserOnline = (userId, socketId) => {
+  const key = userId.toString();
+  const set = onlineUsers.get(key) || new Set();
+  set.add(socketId);
+  onlineUsers.set(key, set);
+  emitOnlineUsers();
+};
+
+const trackUserOffline = (userId, socketId) => {
+  const key = userId.toString();
+  const set = onlineUsers.get(key);
+  if (!set) return;
+  set.delete(socketId);
+  if (set.size === 0) {
+    onlineUsers.delete(key);
+  } else {
+    onlineUsers.set(key, set);
+  }
+  emitOnlineUsers();
+};
 
 io.on("connection", (socket) => {
   console.log("socket connected:", socket.id);
@@ -34,8 +59,7 @@ io.on("connection", (socket) => {
   socket.on("user-online", (userId) => {
     socket.userId = userId;
     socket.join(userId);
-    onlineUsers.add(userId.toString());
-    io.emit("online-users", Array.from(onlineUsers));
+    trackUserOnline(userId, socket.id);
   });
 
   /* ================= DM JOIN ================= */
@@ -235,10 +259,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    if (socket.userId) {
-      onlineUsers.delete(socket.userId.toString());
-      io.emit("online-users", Array.from(onlineUsers));
-    }
+    if (socket.userId) trackUserOffline(socket.userId, socket.id);
     console.log("socket disconnected:", socket.userId || socket.id);
   });
 });

@@ -9,6 +9,7 @@ import dmRoute from "./routes/dm.js";
 import uploadRoute from "./routes/upload.js";
 import pushRoute from "./routes/push.js";
 import serversRoute from "./routes/servers.js";
+import { verifyToken } from "./middlewares/auth.middleware.js";
 
 dotenv.config();
 
@@ -35,10 +36,10 @@ app.use("/uploads", express.static(uploadDir));
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.use("/api/auth", authRoute);
-app.use("/api/friends", friendsRoute);
-app.use("/api/dm", dmRoute);
-app.use("/api/upload", uploadRoute);
-app.use("/api/push", pushRoute);
-app.use("/api/servers", serversRoute);
+app.use("/api/friends", verifyToken, friendsRoute);
+app.use("/api/dm", verifyToken, dmRoute);
+app.use("/api/upload", verifyToken, uploadRoute);
+app.use("/api/push", verifyToken, pushRoute);
+app.use("/api/servers", verifyToken, serversRoute);
 
 export default app;

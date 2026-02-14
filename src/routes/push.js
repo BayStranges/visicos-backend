@@ -15,6 +15,9 @@ router.post("/subscribe", async (req, res) => {
   if (!userId || !subscription?.endpoint || !subscription?.keys) {
     return res.status(400).json({ message: "Invalid subscription" });
   }
+  if (req.user?.id?.toString() !== userId.toString()) {
+    return res.status(403).json({ message: "Yetkisiz" });
+  }
 
   const user = await User.findById(userId);
   if (!user) return res.status(404).json({ message: "User not found" });
