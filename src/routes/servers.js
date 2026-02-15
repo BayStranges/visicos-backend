@@ -5,6 +5,27 @@ import ChannelMessage from "../models/ChannelMessage.js";
 
 const router = express.Router();
 
+const ensureMember = (req, res, server, userId) => {
+  if (!userId) {
+    res.status(403).json({ message: "Yetkisiz" });
+    return false;
+  }
+  const isMember = server?.members?.some((u) => u.toString() === userId.toString());
+  if (!isMember) {
+    res.status(403).json({ message: "Yetkisiz" });
+    return false;
+  }
+  return true;
+};
+
+const ensureOwner = (req, res, server, userId) => {
+  if (!userId || server?.owner?.toString() !== userId.toString()) {
+    res.status(403).json({ message: "Yetkisiz" });
+    return false;
+  }
+  return true;
+};
+
 router.post("/", async (req, res) => {
   const { name, cover = "", ownerId } = req.body;
 
@@ -52,6 +73,7 @@ router.get("/:id", async (req, res) => {
     .populate("owner", "username avatar")
     .populate("members", "username avatar");
   if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureMember(req, res, server, req.user?.id)) return;
   res.json(server);
 });
 
@@ -59,8 +81,9 @@ router.get("/:id/channels/:channelId/messages", async (req, res) => {
   const { id, channelId } = req.params;
   const limit = Math.min(parseInt(req.query.limit || "100", 10), 200);
 
-  const server = await Server.findById(id).select("_id channels");
+  const server = await Server.findById(id).select("_id channels members owner");
   if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureMember(req, res, server, req.user?.id)) return;
 
   const channelExists = server.channels.id(channelId);
   if (!channelExists) return res.status(404).json({ message: "Kanal bulunamadi" });
@@ -87,6 +110,7 @@ router.post("/:id/channels", async (req, res) => {
 
   const server = await Server.findById(id);
   if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureOwner(req, res, server, req.user?.id)) return;
 
   let category = null;
   if (categoryId) {
@@ -112,6 +136,7 @@ router.post("/:id/categories", async (req, res) => {
 
   const server = await Server.findById(id);
   if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureOwner(req, res, server, req.user?.id)) return;
 
   server.categories.push({ name: name.trim() });
   await server.save();
@@ -125,6 +150,7 @@ router.patch("/:id/channels/:channelId", async (req, res) => {
 
   const server = await Server.findById(id);
   if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureOwner(req, res, server, req.user?.id)) return;
 
   const channel = server.channels.id(channelId);
   if (!channel) return res.status(404).json({ message: "Kanal bulunamadi" });

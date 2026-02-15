@@ -1,12 +1,14 @@
 import http from "http";
 import { Server } from "socket.io";
 import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
 import app from "./app.js";
 import { connectDB } from "./config/db.js";
 
 import Message from "./models/Message.js";
 import DmRoom from "./models/DmRoom.js";
 import ChannelMessage from "./models/ChannelMessage.js";
+import ServerModel from "./models/Server.js";
 import { sendPushToUser } from "./push.js";
 import { createSfuHandlers } from "./sfu.js";
 
@@ -25,6 +27,7 @@ const io = new Server(server, {
 });
 
 const onlineUsers = new Map();
+const socketSecret = process.env.JWT_SECRET || "DEV_SECRET";
 
 const emitOnlineUsers = () => {
   io.emit("online-users", Array.from(onlineUsers.keys()));
@@ -51,22 +54,44 @@ const trackUserOffline = (userId, socketId) => {
   emitOnlineUsers();
 };
 
+io.use((socket, next) => {
+  const headerAuth = socket.handshake.headers?.authorization || "";
+  const bearer = headerAuth.startsWith("Bearer ") ? headerAuth.slice(7) : null;
+  const token =
+    socket.handshake.auth?.token ||
+    socket.handshake.query?.token ||
+    bearer;
+  if (!token) return next(new Error("unauthorized"));
+  try {
+    const decoded = jwt.verify(token, socketSecret);
+    socket.userId = decoded.id;
+    return next();
+  } catch (err) {
+    return next(new Error("unauthorized"));
+  }
+});
+
 io.on("connection", (socket) => {
   console.log("socket connected:", socket.id);
   createSfuHandlers(io, socket);
 
   /* ================= USER ================= */
-  socket.on("user-online", (userId) => {
-    socket.userId = userId;
-    socket.join(userId);
-    trackUserOnline(userId, socket.id);
+  socket.on("user-online", () => {
+    if (!socket.userId) return;
+    socket.join(socket.userId.toString());
+    trackUserOnline(socket.userId, socket.id);
   });
 
   /* ================= DM JOIN ================= */
   socket.on("join-dm", async ({ roomId, userId }) => {
     if (!roomId || !userId) return;
+    if (socket.userId?.toString() !== userId.toString()) return;
 
-    socket.userId = userId;
+    const room = await DmRoom.findById(roomId).select("users");
+    if (!room) return;
+    const isMember = room.users.some((u) => u.toString() === userId.toString());
+    if (!isMember) return;
+
     socket.join(roomId);
 
     await Message.updateMany(
@@ -126,7 +151,7 @@ io.on("connection", (socket) => {
     console.log("[webrtc] call-accepted", { socketId: socket.id, roomId });
     socket.to(roomId).emit("call-accepted");
   });
-  
+
   /* ================= TYPING ================= */
   socket.on("typing", ({ roomId, username }) => {
     socket.to(roomId).emit("typing", username);
@@ -139,6 +164,12 @@ io.on("connection", (socket) => {
   /* ================= MESSAGE ================= */
   socket.on("send-message", async ({ roomId, senderId, content, replyTo }) => {
     if (!roomId || !senderId || !content?.trim()) return;
+    if (socket.userId?.toString() !== senderId.toString()) return;
+
+    const room = await DmRoom.findById(roomId);
+    if (!room) return;
+    const isMember = room.users.some((u) => u.toString() === senderId.toString());
+    if (!isMember) return;
 
     let message = await Message.create({
       dmRoom: roomId,
@@ -151,9 +182,6 @@ io.on("connection", (socket) => {
     message = await message.populate("sender", "username avatar");
 
     io.to(roomId).emit("receive-message", message);
-
-    const room = await DmRoom.findById(roomId);
-    if (!room) return;
 
     const socketsInRoom = await io.in(roomId).fetchSockets();
 
@@ -185,9 +213,16 @@ io.on("connection", (socket) => {
   });
 
   /* ================= CHANNEL ================= */
-  socket.on("join-channel", ({ channelId, userId }) => {
+  socket.on("join-channel", async ({ channelId, userId }) => {
     if (!channelId || !userId) return;
-    socket.userId = userId;
+    if (socket.userId?.toString() !== userId.toString()) return;
+
+    const server = await ServerModel.findOne({
+      "channels._id": channelId,
+      members: userId
+    }).select("_id");
+    if (!server) return;
+
     socket.join(`channel:${channelId}`);
   });
 
@@ -198,6 +233,14 @@ io.on("connection", (socket) => {
 
   socket.on("send-channel-message", async ({ serverId, channelId, senderId, content }) => {
     if (!serverId || !channelId || !senderId || !content?.trim()) return;
+    if (socket.userId?.toString() !== senderId.toString()) return;
+
+    const server = await ServerModel.findOne({
+      _id: serverId,
+      members: senderId,
+      "channels._id": channelId
+    }).select("_id");
+    if (!server) return;
 
     let message = await ChannelMessage.create({
       server: serverId,
@@ -215,6 +258,7 @@ io.on("connection", (socket) => {
   socket.on("delete-message", async ({ messageId, userId }) => {
     const msg = await Message.findById(messageId).populate("sender", "username");
     if (!msg) return;
+    if (socket.userId?.toString() !== userId.toString()) return;
     if (msg.sender._id.toString() !== userId.toString()) return;
 
     msg.deleted = true;
@@ -229,6 +273,7 @@ io.on("connection", (socket) => {
   socket.on("edit-message", async ({ messageId, userId, content }) => {
     const msg = await Message.findById(messageId).populate("sender", "username");
     if (!msg || msg.deleted) return;
+    if (socket.userId?.toString() !== userId.toString()) return;
     if (msg.sender._id.toString() !== userId.toString()) return;
 
     msg.content = content.trim();
@@ -242,6 +287,7 @@ io.on("connection", (socket) => {
   socket.on("react-message", async ({ messageId, userId, emoji }) => {
     const msg = await Message.findById(messageId);
     if (!msg) return;
+    if (socket.userId?.toString() !== userId.toString()) return;
 
     const idx = msg.reactions.findIndex(
       (r) => r.user.toString() === userId && r.emoji === emoji

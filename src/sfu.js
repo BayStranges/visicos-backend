@@ -57,6 +57,13 @@ const buildTransportOptions = () => {
 };
 
 export const createSfuHandlers = (io, socket) => {
+  const ensureSocketUser = (userId, cb) => {
+    if (!socket.userId || socket.userId.toString() !== userId.toString()) {
+      cb?.({ error: "unauthorized" });
+      return false;
+    }
+    return true;
+  };
   let currentRoomId = null;
   let currentPeer = null;
 
@@ -100,6 +107,7 @@ export const createSfuHandlers = (io, socket) => {
   socket.on("sfu-join", async ({ roomId, userId }, cb) => {
     try {
       if (!roomId || !userId) return cb?.({ error: "missing params" });
+      if (!ensureSocketUser(userId, cb)) return;
       currentRoomId = roomId;
       const { room, peer } = await ensurePeer(roomId, userId);
       currentPeer = peer;
@@ -124,6 +132,7 @@ export const createSfuHandlers = (io, socket) => {
 
   socket.on("sfu-create-transport", async ({ roomId, userId, direction }, cb) => {
     try {
+      if (!ensureSocketUser(userId, cb)) return;
       const { room, peer } = await ensurePeer(roomId, userId);
       const transport = await room.router.createWebRtcTransport(buildTransportOptions());
       peer.transports.set(transport.id, transport);
@@ -146,6 +155,7 @@ export const createSfuHandlers = (io, socket) => {
 
   socket.on("sfu-connect-transport", async ({ roomId, userId, transportId, dtlsParameters }, cb) => {
     try {
+      if (!ensureSocketUser(userId, cb)) return;
       const { room, peer } = await ensurePeer(roomId, userId);
       const transport = peer.transports.get(transportId);
       if (!transport) return cb?.({ error: "transport not found" });
@@ -158,6 +168,7 @@ export const createSfuHandlers = (io, socket) => {
 
   socket.on("sfu-produce", async ({ roomId, userId, transportId, kind, rtpParameters }, cb) => {
     try {
+      if (!ensureSocketUser(userId, cb)) return;
       const { room, peer } = await ensurePeer(roomId, userId);
       const transport = peer.transports.get(transportId);
       if (!transport) return cb?.({ error: "transport not found" });
@@ -182,6 +193,7 @@ export const createSfuHandlers = (io, socket) => {
 
   socket.on("sfu-consume", async ({ roomId, userId, transportId, producerId, rtpCapabilities }, cb) => {
     try {
+      if (!ensureSocketUser(userId, cb)) return;
       const { room, peer } = await ensurePeer(roomId, userId);
       if (!room.router.canConsume({ producerId, rtpCapabilities })) {
         return cb?.({ error: "cannot consume" });
@@ -227,6 +239,7 @@ export const createSfuHandlers = (io, socket) => {
   });
 
   socket.on("sfu-leave", async ({ roomId, userId }) => {
+    if (!socket.userId || socket.userId.toString() !== userId.toString()) return;
     await cleanupPeer(roomId, userId);
   });
 
