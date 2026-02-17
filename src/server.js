@@ -219,7 +219,7 @@ io.on("connection", (socket) => {
 
     const server = await ServerModel.findOne({
       "channels._id": channelId,
-      members: userId
+      $or: [{ members: userId }, { owner: userId }]
     }).select("_id");
     if (!server) return;
 
@@ -237,8 +237,8 @@ io.on("connection", (socket) => {
 
     const server = await ServerModel.findOne({
       _id: serverId,
-      members: senderId,
-      "channels._id": channelId
+      "channels._id": channelId,
+      $or: [{ members: senderId }, { owner: senderId }]
     }).select("_id");
     if (!server) return;
 

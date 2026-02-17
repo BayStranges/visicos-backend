@@ -22,6 +22,8 @@ const serverSchema = new mongoose.Schema(
     cover: { type: String, default: "" },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    inviteCode: { type: String, default: "", index: true },
+    inviteCreatedAt: { type: Date, default: null },
     categories: [categorySchema],
     channels: [channelSchema]
   },
