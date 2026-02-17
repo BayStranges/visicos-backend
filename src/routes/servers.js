@@ -6,7 +6,12 @@ import ChannelMessage from "../models/ChannelMessage.js";
 
 const router = express.Router();
 
-const asId = (v) => (v ? v.toString() : "");
+const asId = (v) => {
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  if (v._id) return v._id.toString();
+  return v.toString();
+};
 const isOwner = (server, userId) => asId(server?.owner) === asId(userId);
 const isMember = (server, userId) =>
   !!server?.members?.some((u) => asId(u) === asId(userId));
@@ -34,8 +39,12 @@ const ensureOwner = (req, res, server, userId) => {
 const syncOwnerMembership = async (server) => {
   if (!server?.owner) return;
   if (!isMember(server, server.owner)) {
-    server.members = [...(server.members || []), server.owner];
-    await server.save();
+    const ownerId = asId(server.owner);
+    if (!ownerId) return;
+    await Server.updateOne(
+      { _id: server._id },
+      { $addToSet: { members: ownerId } }
+    );
   }
 };
 
