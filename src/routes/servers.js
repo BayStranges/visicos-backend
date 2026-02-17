@@ -307,4 +307,16 @@ router.post("/:id/invite", async (req, res) => {
   });
 });
 
+router.delete("/:id", async (req, res) => {
+  const { id } = req.params;
+  const server = await Server.findById(id).select("_id owner");
+  if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureOwner(req, res, server, req.user?.id)) return;
+
+  await ChannelMessage.deleteMany({ server: id });
+  await Server.deleteOne({ _id: id });
+
+  res.json({ ok: true });
+});
+
 export default router;
