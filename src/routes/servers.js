@@ -158,6 +158,25 @@ router.get("/:id", async (req, res) => {
   res.json(server);
 });
 
+router.patch("/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, cover } = req.body || {};
+
+  const server = await Server.findById(id);
+  if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureOwner(req, res, server, req.user?.id)) return;
+
+  if (typeof name === "string" && name.trim()) {
+    server.name = name.trim();
+  }
+  if (typeof cover === "string") {
+    server.cover = cover.trim();
+  }
+
+  await server.save();
+  res.json(server);
+});
+
 router.get("/:id/channels/:channelId/messages", async (req, res) => {
   const { id, channelId } = req.params;
   const limit = Math.min(parseInt(req.query.limit || "100", 10), 200);
