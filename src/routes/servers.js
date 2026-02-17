@@ -226,6 +226,43 @@ router.post("/:id/categories", async (req, res) => {
   res.json(server.categories[server.categories.length - 1]);
 });
 
+router.patch("/:id/categories/:categoryId", async (req, res) => {
+  const { id, categoryId } = req.params;
+  const { name } = req.body;
+  if (!name?.trim()) {
+    return res.status(400).json({ message: "name gerekli" });
+  }
+
+  const server = await Server.findById(id);
+  if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureOwner(req, res, server, req.user?.id)) return;
+
+  const category = server.categories.id(categoryId);
+  if (!category) return res.status(404).json({ message: "Kategori bulunamadi" });
+  category.name = name.trim();
+  await server.save();
+  res.json(category);
+});
+
+router.delete("/:id/categories/:categoryId", async (req, res) => {
+  const { id, categoryId } = req.params;
+  const server = await Server.findById(id);
+  if (!server) return res.status(404).json({ message: "Sunucu bulunamadi" });
+  if (!ensureOwner(req, res, server, req.user?.id)) return;
+
+  const category = server.categories.id(categoryId);
+  if (!category) return res.status(404).json({ message: "Kategori bulunamadi" });
+
+  for (const ch of server.channels || []) {
+    if (ch.categoryId?.toString() === categoryId.toString()) {
+      ch.categoryId = null;
+    }
+  }
+  category.deleteOne();
+  await server.save();
+  res.json({ ok: true });
+});
+
 router.patch("/:id/channels/:channelId", async (req, res) => {
   const { id, channelId } = req.params;
   const { categoryId = null } = req.body;
