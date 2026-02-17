@@ -27,6 +27,7 @@ const io = new Server(server, {
 });
 
 const onlineUsers = new Map();
+const voiceChannelMembers = new Map();
 const socketSecret = process.env.JWT_SECRET || "DEV_SECRET";
 
 const emitOnlineUsers = () => {
@@ -52,6 +53,34 @@ const trackUserOffline = (userId, socketId) => {
     onlineUsers.set(key, set);
   }
   emitOnlineUsers();
+};
+
+const upsertVoiceMember = (channelId, userId) => {
+  const key = channelId.toString();
+  const set = voiceChannelMembers.get(key) || new Set();
+  set.add(userId.toString());
+  voiceChannelMembers.set(key, set);
+};
+
+const removeVoiceMember = (channelId, userId) => {
+  const key = channelId.toString();
+  const set = voiceChannelMembers.get(key);
+  if (!set) return;
+  set.delete(userId.toString());
+  if (set.size === 0) {
+    voiceChannelMembers.delete(key);
+  } else {
+    voiceChannelMembers.set(key, set);
+  }
+};
+
+const emitVoiceChannelMembers = (channelId) => {
+  const key = channelId.toString();
+  const set = voiceChannelMembers.get(key) || new Set();
+  io.emit("voice-channel-members", {
+    channelId: key,
+    members: Array.from(set)
+  });
 };
 
 io.use((socket, next) => {
@@ -231,6 +260,54 @@ io.on("connection", (socket) => {
     socket.leave(`channel:${channelId}`);
   });
 
+  socket.on("join-voice-channel", async ({ channelId, userId }) => {
+    if (!channelId || !userId) return;
+    if (socket.userId?.toString() !== userId.toString()) return;
+
+    const server = await ServerModel.findOne({
+      "channels._id": channelId,
+      $or: [{ members: userId }, { owner: userId }]
+    }).select("channels");
+    if (!server) return;
+
+    const channel = server.channels.id(channelId);
+    if (!channel || channel.type !== "voice") return;
+
+    upsertVoiceMember(channelId, userId);
+    emitVoiceChannelMembers(channelId);
+  });
+
+  socket.on("leave-voice-channel", ({ channelId, userId }) => {
+    if (!channelId || !userId) return;
+    if (socket.userId?.toString() !== userId.toString()) return;
+    removeVoiceMember(channelId, userId);
+    emitVoiceChannelMembers(channelId);
+  });
+
+  socket.on("get-voice-channel-members", async ({ serverId, userId }, cb) => {
+    try {
+      if (!serverId || !userId) return cb?.({ error: "missing params" });
+      if (socket.userId?.toString() !== userId.toString()) return cb?.({ error: "unauthorized" });
+
+      const server = await ServerModel.findById(serverId).select("channels members owner");
+      if (!server) return cb?.({ error: "not found" });
+      const hasAccess =
+        server.owner?.toString() === userId.toString() ||
+        server.members?.some((m) => m.toString() === userId.toString());
+      if (!hasAccess) return cb?.({ error: "unauthorized" });
+
+      const presence = {};
+      for (const ch of server.channels || []) {
+        if (ch.type !== "voice") continue;
+        const key = ch._id.toString();
+        presence[key] = Array.from(voiceChannelMembers.get(key) || []);
+      }
+      cb?.({ presence });
+    } catch {
+      cb?.({ error: "presence failed" });
+    }
+  });
+
   socket.on("send-channel-message", async ({ serverId, channelId, senderId, content }) => {
     if (!serverId || !channelId || !senderId || !content?.trim()) return;
     if (socket.userId?.toString() !== senderId.toString()) return;
@@ -305,7 +382,21 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    if (socket.userId) trackUserOffline(socket.userId, socket.id);
+    if (socket.userId) {
+      trackUserOffline(socket.userId, socket.id);
+      const user = socket.userId.toString();
+      const affected = [];
+      for (const [channelId, set] of voiceChannelMembers.entries()) {
+        if (!set.has(user)) continue;
+        set.delete(user);
+        if (set.size === 0) voiceChannelMembers.delete(channelId);
+        else voiceChannelMembers.set(channelId, set);
+        affected.push(channelId);
+      }
+      for (const channelId of affected) {
+        emitVoiceChannelMembers(channelId);
+      }
+    }
     console.log("socket disconnected:", socket.userId || socket.id);
   });
 });
