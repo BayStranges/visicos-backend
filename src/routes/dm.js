@@ -17,7 +17,7 @@ router.get("/list/:userId", async (req, res) => {
       return res.status(403).json({ message: "Yetkisiz" });
     }
 
-    const rooms = await DmRoom.find({ users: userId }).populate("users", "username avatar");
+    const rooms = await DmRoom.find({ users: userId, hiddenFor: { $ne: userId } }).populate("users", "username avatar");
     if (!rooms.length) return res.json([]);
 
     const roomIds = rooms.map((r) => r._id);
@@ -78,6 +78,13 @@ router.get("/:roomId/:userId", async (req, res) => {
       return res.status(403).json({ message: "Yetkisiz" });
     }
 
+    const room = await DmRoom.findById(roomId).select("_id users hiddenFor");
+    if (!room) return res.status(404).json({ message: "DM bulunamadi" });
+    const hasUser = room.users.some((u) => u.toString() === userId.toString());
+    if (!hasUser) return res.status(403).json({ message: "Yetkisiz" });
+
+    await DmRoom.updateOne({ _id: roomId }, { $pull: { hiddenFor: userId } });
+
     const limit = Math.min(parseInt(req.query.limit || "200", 10), 200);
     const before = req.query.before ? new Date(req.query.before) : null;
 
@@ -122,8 +129,7 @@ router.post("/close", async (req, res) => {
     const hasUser = room.users.some((u) => u.toString() === userId.toString());
     if (!hasUser) return res.status(403).json({ message: "Yetkisiz" });
 
-    await Message.deleteMany({ dmRoom: roomId });
-    await DmRoom.deleteOne({ _id: roomId });
+    await DmRoom.updateOne({ _id: roomId }, { $addToSet: { hiddenFor: userId } });
 
     res.json({ ok: true });
   } catch (e) {

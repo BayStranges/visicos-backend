@@ -199,6 +199,7 @@ io.on("connection", (socket) => {
     if (!room) return;
     const isMember = room.users.some((u) => u.toString() === senderId.toString());
     if (!isMember) return;
+    await DmRoom.updateOne({ _id: roomId }, { $pull: { hiddenFor: { $in: room.users } } });
 
     let message = await Message.create({
       dmRoom: roomId,
