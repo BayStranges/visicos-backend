@@ -2,6 +2,7 @@ import mediasoup from "mediasoup";
 
 const rooms = new Map();
 let worker = null;
+let transportConfigWarned = false;
 
 const mediaCodecs = [
   {
@@ -46,9 +47,23 @@ const getRoom = async (roomId) => {
 };
 
 const buildTransportOptions = () => {
+  const listenIp = process.env.MEDIASOUP_LISTEN_IP || "0.0.0.0";
   const announcedIp = process.env.MEDIASOUP_ANNOUNCED_IP || null;
+  const isProd = process.env.NODE_ENV === "production";
+  if (!transportConfigWarned && !announcedIp) {
+    transportConfigWarned = true;
+    console.warn(
+      `[sfu] MEDIASOUP_ANNOUNCED_IP is not set. ` +
+      `Media may fail across different networks. listenIp=${listenIp}`
+    );
+    if (isProd) {
+      console.warn(
+        "[sfu] In production, set MEDIASOUP_ANNOUNCED_IP to your public server IP or domain."
+      );
+    }
+  }
   return {
-    listenIps: [{ ip: "0.0.0.0", announcedIp }],
+    listenIps: [{ ip: listenIp, announcedIp }],
     enableUdp: true,
     enableTcp: true,
     preferUdp: true,
