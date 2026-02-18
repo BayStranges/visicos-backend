@@ -74,6 +74,11 @@ const buildTransportOptions = () => {
 export const createSfuHandlers = (io, socket) => {
   const ensureSocketUser = (userId, cb) => {
     if (!socket.userId || socket.userId.toString() !== userId.toString()) {
+      console.warn("[sfu] unauthorized", {
+        socketId: socket.id,
+        socketUserId: socket.userId?.toString?.(),
+        payloadUserId: userId?.toString?.()
+      });
       cb?.({ error: "unauthorized" });
       return false;
     }
