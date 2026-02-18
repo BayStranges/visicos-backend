@@ -121,6 +121,7 @@ export const createSfuHandlers = (io, socket) => {
 
   socket.on("sfu-join", async ({ roomId, userId }, cb) => {
     try {
+      console.log("[sfu] join", { socketId: socket.id, roomId, userId });
       if (!roomId || !userId) return cb?.({ error: "missing params" });
       if (!ensureSocketUser(userId, cb)) return;
       currentRoomId = roomId;
@@ -141,12 +142,24 @@ export const createSfuHandlers = (io, socket) => {
         producers
       });
     } catch (err) {
+      console.error("[sfu] join failed", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        error: err?.message
+      });
       cb?.({ error: "join failed" });
     }
   });
 
   socket.on("sfu-create-transport", async ({ roomId, userId, direction }, cb) => {
     try {
+      console.log("[sfu] create-transport", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        direction
+      });
       if (!ensureSocketUser(userId, cb)) return;
       const { room, peer } = await ensurePeer(roomId, userId);
       const transport = await room.router.createWebRtcTransport(buildTransportOptions());
@@ -164,12 +177,25 @@ export const createSfuHandlers = (io, socket) => {
         direction
       });
     } catch (err) {
+      console.error("[sfu] create-transport failed", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        direction,
+        error: err?.message
+      });
       cb?.({ error: "transport failed" });
     }
   });
 
   socket.on("sfu-connect-transport", async ({ roomId, userId, transportId, dtlsParameters }, cb) => {
     try {
+      console.log("[sfu] connect-transport", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        transportId
+      });
       if (!ensureSocketUser(userId, cb)) return;
       const { room, peer } = await ensurePeer(roomId, userId);
       const transport = peer.transports.get(transportId);
@@ -177,12 +203,26 @@ export const createSfuHandlers = (io, socket) => {
       await transport.connect({ dtlsParameters });
       cb?.({ ok: true });
     } catch (err) {
+      console.error("[sfu] connect-transport failed", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        transportId,
+        error: err?.message
+      });
       cb?.({ error: "connect failed" });
     }
   });
 
   socket.on("sfu-produce", async ({ roomId, userId, transportId, kind, rtpParameters }, cb) => {
     try {
+      console.log("[sfu] produce", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        transportId,
+        kind
+      });
       if (!ensureSocketUser(userId, cb)) return;
       const { room, peer } = await ensurePeer(roomId, userId);
       const transport = peer.transports.get(transportId);
@@ -202,12 +242,27 @@ export const createSfuHandlers = (io, socket) => {
 
       cb?.({ id: producer.id });
     } catch (err) {
+      console.error("[sfu] produce failed", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        transportId,
+        kind,
+        error: err?.message
+      });
       cb?.({ error: "produce failed" });
     }
   });
 
   socket.on("sfu-consume", async ({ roomId, userId, transportId, producerId, rtpCapabilities }, cb) => {
     try {
+      console.log("[sfu] consume", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        transportId,
+        producerId
+      });
       if (!ensureSocketUser(userId, cb)) return;
       const { room, peer } = await ensurePeer(roomId, userId);
       if (!room.router.canConsume({ producerId, rtpCapabilities })) {
@@ -237,28 +292,44 @@ export const createSfuHandlers = (io, socket) => {
         rtpParameters: consumer.rtpParameters
       });
     } catch (err) {
+      console.error("[sfu] consume failed", {
+        socketId: socket.id,
+        roomId,
+        userId,
+        transportId,
+        producerId,
+        error: err?.message
+      });
       cb?.({ error: "consume failed" });
     }
   });
 
   socket.on("sfu-resume", async ({ consumerId }, cb) => {
     try {
+      console.log("[sfu] resume", { socketId: socket.id, consumerId });
       if (!currentPeer) return cb?.({ error: "no peer" });
       const consumer = currentPeer.consumers.get(consumerId);
       if (!consumer) return cb?.({ error: "consumer not found" });
       await consumer.resume();
       cb?.({ ok: true });
     } catch (err) {
+      console.error("[sfu] resume failed", {
+        socketId: socket.id,
+        consumerId,
+        error: err?.message
+      });
       cb?.({ error: "resume failed" });
     }
   });
 
   socket.on("sfu-leave", async ({ roomId, userId }) => {
+    console.log("[sfu] leave", { socketId: socket.id, roomId, userId });
     if (!socket.userId || socket.userId.toString() !== userId.toString()) return;
     await cleanupPeer(roomId, userId);
   });
 
   socket.on("disconnect", async () => {
+    console.log("[sfu] disconnect", { socketId: socket.id, roomId: currentRoomId, userId: socket.userId });
     if (currentRoomId && socket.userId) {
       await cleanupPeer(currentRoomId, socket.userId);
     }
